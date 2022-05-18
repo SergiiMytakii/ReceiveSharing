@@ -8,16 +8,18 @@ import 'package:receivesharing/constants/dimens_constants.dart';
 import 'package:receivesharing/constants/file_constants.dart';
 import 'package:receivesharing/constants/font_size_constants.dart';
 import 'package:receivesharing/extension/scaffold_extension.dart';
-import 'package:receivesharing/ui/home/model/user_detail_model.dart';
-import 'package:receivesharing/widget/empty_view.dart';
+import 'package:receivesharing/service/firebase_service.dart';
 
+import 'package:receivesharing/widget/empty_view.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../../service/firebase_service.dart';
 import '../model/media_preview_item.dart';
 
 class SharingMediaPreviewScreen extends StatefulWidget {
-  final List<UserDetailModel>? userList;
   final List<File>? files;
   final String? text;
-  SharingMediaPreviewScreen({this.userList, this.files, this.text = ""});
+  SharingMediaPreviewScreen({this.files, this.text = ""});
   @override
   _SharingMediaPreviewScreenState createState() =>
       _SharingMediaPreviewScreenState();
@@ -28,10 +30,15 @@ class _SharingMediaPreviewScreenState extends State<SharingMediaPreviewScreen> {
       PageController(initialPage: 0, viewportFraction: 0.95, keepPage: false);
   final List<MediaPreviewItem> _galleryItems = [];
   int _initialIndex = 0;
-
+  var link = '';
   @override
   void initState() {
     super.initState();
+
+    FirebaseServise.uploadFile(widget.files!.first)
+        .then((value) => setState(() {
+              link = value;
+            }));
     SchedulerBinding.instance?.addPostFrameCallback((timeStamp) {
       setState(() {
         var i = 0;
@@ -54,33 +61,29 @@ class _SharingMediaPreviewScreenState extends State<SharingMediaPreviewScreen> {
             children: [
               SizedBox(height: DimensionConstants.sizedBoxHeight5),
               _fullMediaPreview(context),
+              SizedBox(height: DimensionConstants.sizedBoxHeight5),
               _fileName(context),
-              _addCaptionPreview(context),
-              _horizontalMediaFilesView(context)
+              SizedBox(height: DimensionConstants.sizedBoxHeight5),
+              _link(context),
             ],
           ).generalScaffold(
             context: context,
             appTitle: "Send to...",
             files: widget.files,
-            userList: widget.userList)
-        : widget.text!.isNotEmpty
-            ? _sharedTextView(context).generalScaffold(
-                context: context,
-                appTitle: "Send to...",
-                files: widget.files,
-                userList: widget.userList)
-            : EmptyView(
-                topLine: "No files are here..",
-                bottomLine: "Select files from gallery or file manager.",
-              ).generalScaffold(
-                context: context,
-                appTitle: "Send to...",
-                files: widget.files,
-                userList: widget.userList);
+          )
+        : EmptyView(
+            topLine: "No files are here..",
+            bottomLine: "Select files from gallery or file manager.",
+          ).generalScaffold(
+            context: context,
+            appTitle: "Send to...",
+            files: widget.files,
+          );
   }
 
-  Widget _fullMediaPreview(BuildContext context) => Expanded(
-          child: PageView(
+  Widget _fullMediaPreview(BuildContext context) => Container(
+      height: MediaQuery.of(context).size.height * 0.5,
+      child: PageView(
         controller: _pageController,
         physics: ClampingScrollPhysics(),
         scrollDirection: Axis.horizontal,
@@ -118,46 +121,19 @@ class _SharingMediaPreviewScreenState extends State<SharingMediaPreviewScreen> {
             "${_galleryItems[_initialIndex].resource!.path.split('/').last}"),
       );
 
-  Widget _addCaptionPreview(BuildContext context) => Row(children: [
-        Expanded(
-            child: Padding(
-                padding: const EdgeInsets.only(
-                    left: DimensionConstants.leftPadding15,
-                    right: DimensionConstants.rightPadding20,
-                    top: DimensionConstants.topPadding10),
-                child: TextFormField(
-                    controller: _galleryItems[_initialIndex].controller,
-                    textInputAction: TextInputAction.done,
-                    focusNode: FocusNode(),
-                    style: TextStyle(
-                        color: ColorConstants.blackColor,
-                        fontSize: FontSizeWeightConstants.fontSize14,
-                        fontWeight: FontSizeWeightConstants.fontWeightNormal),
-                    decoration: InputDecoration(
-                        hintText: "Add Caption",
-                        hintStyle: TextStyle(
-                            color: ColorConstants.blackColor,
-                            fontSize: FontSizeWeightConstants.fontSize14,
-                            fontWeight:
-                                FontSizeWeightConstants.fontWeightNormal),
-                        filled: true,
-                        fillColor: ColorConstants.offWhiteColor,
-                        counter: Offstage(),
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: DimensionConstants.horizontalPadding5),
-                        border: InputBorder.none),
-                    onFieldSubmitted: (value) {},
-                    keyboardType: TextInputType.text,
-                    onTap: () {}))),
+  Widget _link(BuildContext context) => Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(children: [
+        link.isNotEmpty
+            ? Expanded(child: Text(link))
+            : Expanded(child: Center(child: CircularProgressIndicator())),
         GestureDetector(
-            onTap: () {
-              _onSharingTap(context);
-            },
+            onTap: _onSharingTap,
             child: Padding(
                 padding: const EdgeInsets.only(
                     bottom: DimensionConstants.bottomPadding8),
                 child: Image.asset(FileConstants.icSend, scale: 2.7)))
-      ]);
+      ]));
 
   Widget _horizontalMediaFilesView(BuildContext context) =>
       (MediaQuery.of(context).viewInsets.bottom == 0)
@@ -214,32 +190,10 @@ class _SharingMediaPreviewScreenState extends State<SharingMediaPreviewScreen> {
         duration: Duration(milliseconds: 400), curve: Curves.easeIn);
   }
 
-  Widget _sharedTextView(BuildContext context) =>
-      Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-        Text("Shared text here...",
-            style: TextStyle(
-                color: ColorConstants.greyColor,
-                fontSize: FontSizeWeightConstants.fontSize20)),
-        Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: DimensionConstants.horizontalPadding10),
-            child: Row(children: [
-              Text(widget.text!,
-                  style:
-                      TextStyle(fontSize: FontSizeWeightConstants.fontSize20)),
-              Spacer(),
-              GestureDetector(
-                  onTap: () {
-                    _onSharingTap(context);
-                  },
-                  child: Padding(
-                      padding: const EdgeInsets.only(
-                          bottom: DimensionConstants.bottomPadding8),
-                      child: Image.asset(FileConstants.icSend, scale: 2.7)))
-            ]))
-      ]);
-
-  void _onSharingTap(BuildContext context) {
-    //You can use this method to share media file or text based on your requirements
+  void _onSharingTap() {
+    if (link.isNotEmpty) {
+      print('share $link');
+      Share.share(link);
+    }
   }
 }

@@ -1,4 +1,4 @@
-package com.jp.receivesharing
+package com.screenia.dev
 
 
 import android.content.Intent
